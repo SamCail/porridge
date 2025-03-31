@@ -32,7 +32,14 @@ install_requirements () {
 }
 
 build_libargon2 () {
-    $PYTHON setup.py build
+    cd extras/libargon2/ && make && make test
+    for each_file in libargon2.so* libargon2.dylib libargon2.dll;do
+      if [ -f $each_file ];then
+        echo "Copying $each_file to porridge"
+        cp $each_file ../../porridge/
+      fi;
+    done;
+    cd ../../
 }
 
 install_project() {

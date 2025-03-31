@@ -1,8 +1,21 @@
 import contextlib
 import os
 import re
+from ctypes import (
+    CDLL,
+    CFUNCTYPE,
+    POINTER,
+    Structure,
+    cast,
+    c_char_p,
+    c_size_t,
+    c_int,
+    c_uint8,
+    c_uint32,
+    c_void_p,
+    string_at,
+)
 
-from ._ffi import ffi, lib
 from .utils import (
     b64_decode_raw,
     b64_encode_raw,
@@ -19,6 +32,80 @@ from .exceptions import (
 
 __all__ = ("Porridge",)
 
+ARGON2_LIB = CDLL(os.path.join(os.path.dirname(__file__), "libargon2.so.0"))
+
+
+class Argon2Type(c_int):
+    Argon2_d = 0
+    Argon2_i = 1
+    Argon2_id = 2
+
+
+class Argon2Version(c_int):
+    ARGON2_VERSION_10 = 0x10
+    ARGON2_VERSION_13 = 0x13
+    ARGON2_VERSION_NUMBER = 0x13
+
+
+class Argon2ErrorCodes(c_int):
+    ARGON2_OK = 0
+
+    ARGON2_OUTPUT_PTR_NULL = -1
+
+    ARGON2_OUTPUT_TOO_SHORT = -2
+    ARGON2_OUTPUT_TOO_LONG = -3
+
+    ARGON2_PWD_TOO_SHORT = -4
+    ARGON2_PWD_TOO_LONG = -5
+
+    ARGON2_SALT_TOO_SHORT = -6
+    ARGON2_SALT_TOO_LONG = -7
+
+    ARGON2_AD_TOO_SHORT = -8
+    ARGON2_AD_TOO_LONG = -9
+
+    ARGON2_SECRET_TOO_SHORT = -10
+    ARGON2_SECRET_TOO_LONG = -11
+
+    ARGON2_TIME_TOO_SMALL = -12
+    ARGON2_TIME_TOO_LARGE = -13
+
+    ARGON2_MEMORY_TOO_LITTLE = -14
+    ARGON2_MEMORY_TOO_MUCH = -15
+
+    ARGON2_LANES_TOO_FEW = -16
+    ARGON2_LANES_TOO_MANY = -17
+
+    ARGON2_PWD_PTR_MISMATCH = -18  # /* NULL ptr with non-zero length */
+    ARGON2_SALT_PTR_MISMATCH = -19  # /* NULL ptr with non-zero length */
+    ARGON2_SECRET_PTR_MISMATCH = -20  # /* NULL ptr with non-zero length */
+    ARGON2_AD_PTR_MISMATCH = -21  # /* NULL ptr with non-zero length */
+
+    ARGON2_MEMORY_ALLOCATION_ERROR = -22
+
+    ARGON2_FREE_MEMORY_CBK_NULL = -23
+    ARGON2_ALLOCATE_MEMORY_CBK_NULL = -24
+
+    ARGON2_INCORRECT_PARAMETER = -25
+    ARGON2_INCORRECT_TYPE = -26
+
+    ARGON2_OUT_PTR_MISMATCH = -27
+
+    ARGON2_THREADS_TOO_FEW = -28
+    ARGON2_THREADS_TOO_MANY = -29
+
+    ARGON2_MISSING_ARGS = -30
+
+    ARGON2_ENCODING_FAIL = -31
+
+    ARGON2_DECODING_FAIL = -32
+
+    ARGON2_THREAD_FAIL = -33
+
+    ARGON2_DECODING_LENGTH_FAIL = -34
+
+    ARGON2_VERIFY_MISMATCH = -35
+
 
 # These parameters should be increased regularly to keep boiling slow
 # on new hardware
@@ -28,23 +115,62 @@ DEFAULT_TIME_COST = 2
 DEFAULT_MEMORY_COST = 512
 DEFAULT_PARALLELISM = 4
 DEFAULT_PARAMETER_THRESHOLD = 4
-DEFAULT_FLAGS = lib.ARGON2_FLAG_CLEAR_PASSWORD | lib.ARGON2_FLAG_CLEAR_SECRET
+
+ARGON2_FLAG_CLEAR_PASSWORD = c_uint32(1 << 0)
+ARGON2_FLAG_CLEAR_SECRET = c_uint32(1 << 1)
+ARGON2_DEFAULT_FLAGS = ARGON2_FLAG_CLEAR_PASSWORD | ARGON2_FLAG_CLEAR_SECRET
+
+ALLOCATE_FPTR = CFUNCTYPE(c_int, POINTER(c_uint8), c_size_t)
+DEALLOCATE_FPTR = CFUNCTYPE(None, POINTER(c_uint8), c_size_t)
+
+
+class Argon2Context(Structure):
+    _fields_ = [
+        ("out", POINTER(c_uint8)),  # Pointer to output array
+        ("outlen", c_uint32),  # Length of output
+        ("pwd", POINTER(c_uint8)),  # Pointer to password array
+        ("pwdlen", c_uint32),  # Length of password
+        ("salt", POINTER(c_uint8)),  # Pointer to salt array
+        ("saltlen", c_uint32),  # Length of salt
+        ("secret", POINTER(c_uint8)),  # Pointer to secret (key) array
+        ("secretlen", c_uint32),  # Length of secret
+        ("ad", POINTER(c_uint8)),  # Pointer to associated data array
+        ("adlen", c_uint32),  # Length of associated data
+        ("t_cost", c_uint32),  # Time cost (number of passes)
+        ("m_cost", c_uint32),  # Memory cost (KB)
+        ("lanes", c_uint32),  # Number of lanes (degree of parallelism)
+        ("threads", c_uint32),  # Maximum number of threads
+        ("version", c_uint32),  # Version number
+        (
+            "allocate_cbk",
+            POINTER(c_void_p),
+        ),  # Memory allocator callback function pointer
+        ("free_cbk", POINTER(c_void_p)),  # Memory deallocator callback function pointer
+        ("flags", c_uint32),  # Flags (options for clearing memory)
+    ]
+
 
 # This regex validates the spec from
 # https://github.com/P-H-C/phc-string-format/blob/master/phc-sf-spec.md
-ENCODED_HASH_RE = re.compile(r''.join([
-        r'^\$argon2i\$',
-        r'(?:v=(?P<version>[0-9]{1,3})\$)?',
-        r''.join([
-            r'm=(?P<memory_cost>[0-9]{1,10})',
-            r',t=(?P<time_cost>[0-9]{1,10})',
-            r',p=(?P<parallelism>[0-9]{1,3})',
-            r'(?:,keyid=(?P<keyid>[a-zA-Z0-9+/]{0,11}))?', # optional
-            r'(?:,data=(?P<data>[a-zA-Z0-9+/]{0,43}))?', # optional, unused
-        ]),
-        r'\$(?P<salt>[a-zA-Z0-9+/]{11,64})\$',
-        r'(?P<hash>[a-zA-Z0-9+/]{16,86})',
-    ]) + r'$'
+ENCODED_HASH_RE = re.compile(
+    r"".join(
+        [
+            r"^\$argon2i\$",
+            r"(?:v=(?P<version>[0-9]{1,3})\$)?",
+            r"".join(
+                [
+                    r"m=(?P<memory_cost>[0-9]{1,10})",
+                    r",t=(?P<time_cost>[0-9]{1,10})",
+                    r",p=(?P<parallelism>[0-9]{1,3})",
+                    r"(?:,keyid=(?P<keyid>[a-zA-Z0-9+/]{0,11}))?",  # optional
+                    r"(?:,data=(?P<data>[a-zA-Z0-9+/]{0,43}))?",  # optional, unused
+                ]
+            ),
+            r"\$(?P<salt>[a-zA-Z0-9+/]{11,64})\$",
+            r"(?P<hash>[a-zA-Z0-9+/]{16,86})",
+        ]
+    )
+    + r"$"
 )
 
 
@@ -105,16 +231,16 @@ class Porridge(object):
         self.salt_len = salt_len
         self.encoding = encoding
         if parameter_threshold < 1:
-            raise ValueError('parameter_threshold must be at least 1')
+            raise ValueError("parameter_threshold must be at least 1")
         self.parameter_threshold = parameter_threshold
 
         self.secret_map = {}
         self.secret = None
         self.keyid = None
-        for secret_pair in secrets.split(','):
-            keyid, secret = secret_pair.split(':', 1)
-            keyid = keyid.encode('utf-8')
-            secret = secret.encode('utf-8')
+        for secret_pair in secrets.split(","):
+            keyid, secret = secret_pair.split(":", 1)
+            keyid = keyid.encode("utf-8")
+            secret = secret.encode("utf-8")
             if self.secret is None:
                 self.secret = secret
                 self.keyid = keyid
@@ -122,14 +248,12 @@ class Porridge(object):
 
         self._self_check()
 
-
     def _self_check(self):
         """
         Perform a single run of boiling to ensure we have a valid
         combination of parameters.
         """
-        self.boil('dummy')
-
+        self.boil("dummy")
 
     def boil(self, password):
         """
@@ -161,16 +285,15 @@ class Porridge(object):
         with argon2_context(**context_params) as ctx:
             result = compute_hash(ctx)
 
-            if result != lib.ARGON2_OK:
+            if result != Argon2ErrorCodes.ARGON2_OK:
                 error_message = argon2_error_message(result)
                 if is_operational_error(result):
                     raise PorridgeError(error_message)
                 else:
                     raise ParameterError(error_message)
 
-            raw_hash = bytes(ffi.buffer(ctx.out, ctx.outlen))
+            raw_hash = bytes(string_at(ctx.out, ctx.outlen))
         return self._encode(raw_hash, salt)
-
 
     def verify(self, password, boiled):
         """
@@ -195,38 +318,42 @@ class Porridge(object):
             raise TypeError(e)
 
         if len(boiled) > 265:
-             # Ensure we don't DDoS ourselves if the database holds corrupt values
-            raise EncodedPasswordError('Encoded password exceeds maximum length of '
-                '265, was {length}'.format(length=len(boiled)))
+            # Ensure we don't DDoS ourselves if the database holds corrupt values
+            raise EncodedPasswordError(
+                "Encoded password exceeds maximum length of 265, was {length}".format(
+                    length=len(boiled)
+                )
+            )
 
         context_params = parse_boiled(boiled)
         self._verify_parameters_within_threshold(context_params)
-        raw_hash = context_params.pop('raw_hash')
+        raw_hash = context_params.pop("raw_hash")
 
-        context_params.update(dict(
-            hash_len=len(raw_hash),
-            password=self._ensure_bytes(password),
-        ))
+        context_params.update(
+            dict(
+                hash_len=len(raw_hash),
+                password=self._ensure_bytes(password),
+            )
+        )
 
-        keyid = context_params.get('keyid')
+        keyid = context_params.get("keyid")
         if keyid:
-            del context_params['keyid']
+            del context_params["keyid"]
             secret = self.secret_map.get(keyid)
             if not secret:
-                raise MissingKeyError(keyid.decode('utf-8'))
-            context_params['secret'] = secret
+                raise MissingKeyError(keyid.decode("utf-8"))
+            context_params["secret"] = secret
 
         with argon2_context(**context_params) as ctx:
             result = verify_hash(ctx, raw_hash)
 
-        if result == lib.ARGON2_OK:
+        if result == Argon2ErrorCodes.ARGON2_OK:
             return True
-        elif result == lib.ARGON2_VERIFY_MISMATCH:
+        elif result == Argon2ErrorCodes.ARGON2_VERIFY_MISMATCH:
             return False
         else:
             error_message = argon2_error_message(result)
             raise PorridgeError(error_message)
-
 
     def needs_update(self, boiled):
         """
@@ -239,74 +366,75 @@ class Porridge(object):
         :rtype: bool
         """
         parsed = parse_boiled(boiled)
-        if parsed['version'] < lib.ARGON2_VERSION_NUMBER:
+        if parsed["version"] < Argon2Version.ARGON2_VERSION_NUMBER:
             return True
 
-        if parsed['parallelism'] < self.parallelism:
+        if parsed["parallelism"] < self.parallelism:
             return True
 
-        if parsed['memory_cost'] < self.memory_cost:
+        if parsed["memory_cost"] < self.memory_cost:
             return True
 
-        if parsed['time_cost'] < self.time_cost:
+        if parsed["time_cost"] < self.time_cost:
             return True
 
-        if len(parsed['salt']) < self.salt_len:
+        if len(parsed["salt"]) < self.salt_len:
             return True
 
-        if len(parsed['raw_hash']) < self.hash_len:
+        if len(parsed["raw_hash"]) < self.hash_len:
             return True
 
-        if parsed.get('keyid') != self.keyid:
+        if parsed.get("keyid") != self.keyid:
             return True
 
         return False
 
-
     def _ensure_bytes(self, s):
         return ensure_bytes(s, self.encoding)
 
-
     def _verify_parameters_within_threshold(self, parameters):
-        for parameter in ('time_cost', 'memory_cost', 'parallelism'):
+        for parameter in ("time_cost", "memory_cost", "parallelism"):
             given_parameter = parameters[parameter]
             our_parameter = getattr(self, parameter)
             if given_parameter > our_parameter * self.parameter_threshold:
-                raise EncodedPasswordError('%s exceeds threshold of what we will process' % parameter)
-
+                raise EncodedPasswordError(
+                    "%s exceeds threshold of what we will process" % parameter
+                )
 
     def _encode(self, raw_hash, salt):
         template = (
-            '${algo}$v={version}$m={m_cost},t={t_cost},p={parallelism}'
-            ',keyid={keyid}${salt}${hash}'
+            "${algo}$v={version}$m={m_cost},t={t_cost},p={parallelism}"
+            ",keyid={keyid}${salt}${hash}"
         )
         return template.format(
-                algo='argon2i',
-                t_cost=self.time_cost,
-                m_cost=self.memory_cost,
-                parallelism=self.parallelism,
-                salt=b64_encode_raw(salt),
-                hash=b64_encode_raw(raw_hash),
-                version=lib.ARGON2_VERSION_NUMBER,
-                keyid=self.keyid.decode('utf-8'),
-            )
-
+            algo="argon2i",
+            t_cost=self.time_cost,
+            m_cost=self.memory_cost,
+            parallelism=self.parallelism,
+            salt=b64_encode_raw(salt),
+            hash=b64_encode_raw(raw_hash),
+            version=Argon2Version.ARGON2_VERSION_NUMBER,
+            keyid=self.keyid.decode("utf-8"),
+        )
 
     def __str__(self):
-        return ("Porridge(key='{key}', memory_cost={memory_cost}, "
-            "time_cost={time_cost}, parallelism={parallelism})").format(
-            key=self.keyid.decode('utf-8'),
+        return (
+            "Porridge(key='{key}', memory_cost={memory_cost}, "
+            "time_cost={time_cost}, parallelism={parallelism})"
+        ).format(
+            key=self.keyid.decode("utf-8"),
             memory_cost=self.memory_cost,
             time_cost=self.time_cost,
             parallelism=self.parallelism,
         )
 
-
     def __repr__(self):
-        return ("Porridge(key='{key}', memory_cost={memory_cost}, time_cost={time_cost}, "
+        return (
+            "Porridge(key='{key}', memory_cost={memory_cost}, time_cost={time_cost}, "
             "parallelism={parallelism}, hash_len={hash_len}, salt_len={salt_len}, "
-            "parameter_threshold={parameter_threshold}, encoding='{encoding}')").format(
-            key=self.keyid.decode('utf-8'),
+            "parameter_threshold={parameter_threshold}, encoding='{encoding}')"
+        ).format(
+            key=self.keyid.decode("utf-8"),
             memory_cost=self.memory_cost,
             time_cost=self.time_cost,
             parallelism=self.parallelism,
@@ -320,19 +448,19 @@ class Porridge(object):
 def parse_boiled(boiled):
     match = ENCODED_HASH_RE.match(boiled)
     if not match:
-        raise EncodedPasswordError('Encoded password is on unknown format', boiled)
-    version = match.group('version')
+        raise EncodedPasswordError("Encoded password is on unknown format", boiled)
+    version = match.group("version")
     if version:
         version = int(version)
     else:
         # Default to the old version as only ARGON2_VERSION_13 includes it in the boiled string
-        version = lib.ARGON2_VERSION_10
+        version = Argon2Version.ARGON2_VERSION_10
 
-    salt = b64_decode_raw(match.group('salt'))
-    raw_hash = b64_decode_raw(match.group('hash'))
-    time_cost = int(match.group('time_cost'))
-    memory_cost = int(match.group('memory_cost'))
-    parallelism = int(match.group('parallelism'))
+    salt = b64_decode_raw(match.group("salt"))
+    raw_hash = b64_decode_raw(match.group("hash"))
+    time_cost = int(match.group("time_cost"))
+    memory_cost = int(match.group("memory_cost"))
+    parallelism = int(match.group("parallelism"))
 
     parsed = dict(
         time_cost=time_cost,
@@ -343,69 +471,84 @@ def parse_boiled(boiled):
         version=version,
     )
 
-    keyid = match.group('keyid')
+    keyid = match.group("keyid")
     if keyid:
-        parsed['keyid'] = keyid.encode('utf-8')
+        parsed["keyid"] = keyid.encode("utf-8")
 
     return parsed
 
 
 def argon2_error_message(error_code):
-    return ffi.string(lib.argon2_error_message(error_code)).decode('utf-8')
+    ARGON2_LIB.argon2_error_message.argtype = [c_int]
+    ARGON2_LIB.argon2_error_message.restype = c_char_p
+
+    return ARGON2_LIB.argon2_error_message(error_code).decode("utf-8")
 
 
 def is_operational_error(error_code):
-    return error_code in set([
-        lib.ARGON2_THREAD_FAIL,
-        lib.ARGON2_MEMORY_ALLOCATION_ERROR,
-    ])
+    return error_code in {
+        Argon2ErrorCodes.ARGON2_THREAD_FAIL,
+        Argon2ErrorCodes.ARGON2_MEMORY_ALLOCATION_ERROR,
+    }
 
 
 def compute_hash(context):
-    '''Minimal wrapper around argon2_ctx to enable mocking'''
-    return lib.argon2_ctx(context, lib.Argon2_i)
+    """Minimal wrapper around argon2_ctx to enable mocking"""
+
+    ARGON2_LIB.argon2_ctx.argtypes = [POINTER(Argon2Context), Argon2Type]
+    ARGON2_LIB.argon2_ctx.restype = c_int
+    return ARGON2_LIB.argon2_ctx(context, Argon2Type.Argon2_i)
 
 
 def verify_hash(context, raw_hash):
-    '''Minimal wrapper around argon2i_verify_ctx to enable mocking'''
-    return lib.argon2i_verify_ctx(context, raw_hash)
+    """Minimal wrapper around argon2i_verify_ctx to enable mocking"""
+
+    ARGON2_LIB.argon2i_verify_ctx.argtypes = [POINTER(Argon2Context), c_char_p]
+    ARGON2_LIB.argon2i_verify_ctx.restype = c_int
+    return ARGON2_LIB.argon2i_verify_ctx(context, raw_hash)
 
 
 @contextlib.contextmanager
 def argon2_context(
-        password=None, # bytes
-        salt=None,
-        secret=None,
-        hash_len=DEFAULT_HASH_LENGTH,
-        time_cost=DEFAULT_TIME_COST,
-        memory_cost=DEFAULT_MEMORY_COST,
-        parallelism=DEFAULT_PARALLELISM,
-        flags=DEFAULT_FLAGS,
-        version=lib.ARGON2_VERSION_NUMBER,
-        ):
-    csalt = ffi.new("uint8_t[]", salt)
-    cout = ffi.new("uint8_t[]", hash_len)
-    cpwd = ffi.new("uint8_t[]", password)
+    password=None,  # bytes
+    salt=None,
+    secret=None,
+    hash_len=DEFAULT_HASH_LENGTH,
+    time_cost=DEFAULT_TIME_COST,
+    memory_cost=DEFAULT_MEMORY_COST,
+    parallelism=DEFAULT_PARALLELISM,
+    flags=ARGON2_DEFAULT_FLAGS,
+    version=Argon2Version.ARGON2_VERSION_NUMBER,
+):
+    csalt = (c_uint8 * len(salt))(*salt)
+    cout = (c_uint8 * hash_len)()
+    cpwd = (c_uint8 * len(password))(*password)
 
     if secret:
-        csecret = ffi.new("uint8_t[]", secret)
+        csecret = (c_uint8 * len(secret))(*secret)
         secret_len = len(secret)
     else:
-        csecret = ffi.NULL
+        csecret = None
         secret_len = 0
 
-    ctx = ffi.new("argon2_context *", dict(
-            version=version,
-            out=cout, outlen=hash_len,
-            pwd=cpwd, pwdlen=len(password),
-            salt=csalt, saltlen=len(salt),
-            secret=csecret, secretlen=secret_len,
-            ad=ffi.NULL, adlen=0,
-            t_cost=time_cost,
-            m_cost=memory_cost,
-            lanes=parallelism, threads=parallelism,
-            allocate_cbk=ffi.NULL, free_cbk=ffi.NULL,
-            flags=flags,
-        )
-    )
-    yield ctx
+    context = Argon2Context()
+    context.out = cout
+    context.outlen = hash_len
+    context.pwd = cpwd
+    context.pwdlen = len(password)
+    context.salt = csalt
+    context.saltlen = len(salt)
+    context.secret = csecret
+    context.secretlen = secret_len
+    context.ad = POINTER(c_uint8)(cast(c_void_p(0), POINTER(c_uint8)))
+    context.adlen = 0
+    context.t_cost = time_cost
+    context.m_cost = memory_cost
+    context.lanes = parallelism
+    context.threads = parallelism
+    context.version = version
+    context.allocate_cbk = None
+    context.free_cbk = None
+    context.flags = flags
+
+    yield context
