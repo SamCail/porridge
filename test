@@ -3,7 +3,7 @@
 if [ "${NO_VIRTUALENV:-0}" -eq 1 ]; then
     PYTEST="py.test"
 else
-    PYTEST="./venv/bin/py.test"
+    PYTEST="./.venv/bin/python3 -m pytest"
 fi
 
 $PYTEST tests/ $@

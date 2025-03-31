@@ -2,8 +2,8 @@
 
 set -eu
 
-PYTHON="./venv/bin/python"
-PIP="./venv/bin/pip"
+PYTHON="./.venv/bin/python3"
+PIP="./.venv/bin/python3 -m pip"
 
 main () {
     initialize_submodules
@@ -24,7 +24,7 @@ create_virtualenv () {
         PYTHON="python"
         return
     fi
-    virtualenv venv -p $(which python3)
+    python3 -m venv .venv
 }
 
 install_requirements () {
