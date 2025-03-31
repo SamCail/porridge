@@ -249,11 +249,11 @@ setup(
     description="Simple, strong and standardized keyed password storage",
     packages=find_packages(),
     install_requires=['cffi>=1.0.0'],
-    keywords="password argon2 hash boil secret security",
     long_description=long_description,
     keywords=[
         "password",
         "password-storage",
+        "argon2"
         "hash",
         "hashing",
         "security",
