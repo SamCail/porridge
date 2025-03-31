@@ -3,7 +3,7 @@
 from __future__ import unicode_literals
 
 import pytest
-from hypothesis import given, assume
+from hypothesis import settings, given, assume, HealthCheck
 from hypothesis.strategies import integers, text
 
 from porridge import Porridge, MissingKeyError, EncodedPasswordError
@@ -28,6 +28,7 @@ def test_verify(test_password):
 
 
 @given(text())
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 def test_verify_self(porridge, given_password):
     assert porridge.verify(given_password, porridge.boil(given_password))
 
@@ -37,6 +38,7 @@ def test_verify_self(porridge, given_password):
     memory_cost=integers(0, 513),
     parallelism=integers(1, 5),
 )
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 def test_verify_custom_parameters(password, time_cost, memory_cost, parallelism):
     assume(parallelism * 8 <= memory_cost)
     porridge = Porridge('key:secret', time_cost=time_cost, memory_cost=memory_cost,
@@ -50,7 +52,7 @@ def test_verify_self_default_parameters(password):
 
 
 def test_invalid_password(porridge):
-    assert porridge.verify('pass1', porridge.boil('pass2')) == False
+    assert porridge.verify("pass1", porridge.boil("pass2")) is False
 
 
 def test_attacker_cant_verify_without_secret(password):
@@ -104,6 +106,7 @@ def test_verify_bails_on_values_higher_than_configured(porridge, parameter):
 
 @pytest.mark.parametrize('parameter', ('time_cost', 'memory_cost', 'parallelism'))
 @given(threshold=integers(1, 8))
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 def test_verify_doesnt_bail_on_values_equal_to_threshold(parameter, threshold):
     # Create an instance where memory_cost is at least the highest parallelism*8
     porridge = Porridge('key1:secret1', memory_cost=64, time_cost=1, parallelism=1,
@@ -116,7 +119,7 @@ def test_verify_doesnt_bail_on_values_equal_to_threshold(parameter, threshold):
     parameters[parameter] *= porridge.parameter_threshold
     encoded = get_encoded_password_with_parameters(parameters)
     # Since the parameters are wrong the password should not be valid
-    assert porridge.verify('password', encoded) == False
+    assert porridge.verify("password", encoded) is False
 
 
 def get_encoded_password_with_parameters(parameters):

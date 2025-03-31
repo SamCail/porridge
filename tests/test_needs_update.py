@@ -31,7 +31,7 @@ def test_needs_update_old_parameters(reason, encoded):
 ))
 def test_needs_update_up_to_date(reason, encoded):
     porridge = create_porridge()
-    assert porridge.needs_update(encoded) == False, reason
+    assert porridge.needs_update(encoded) is False, reason
 
 
 def create_porridge():
