@@ -6,14 +6,17 @@ import pytest
 
 from porridge.utils import ensure_bytes, b64_decode_raw, b64_encode_raw
 
-raw_b64_string = pytest.mark.parametrize('raw_b64_string', [
-    ('YQ', b'a'),
-    ('YWE', b'aa'),
-    ('YWFh', b'aaa'),
-    ('', b''),
-    ('AA==', b'\x00'),
-    ('AA', b'\x00'),
-])
+raw_b64_string = pytest.mark.parametrize(
+    "raw_b64_string",
+    [
+        ("YQ", b"a"),
+        ("YWE", b"aa"),
+        ("YWFh", b"aaa"),
+        ("", b""),
+        ("AA==", b"\x00"),
+        ("AA", b"\x00"),
+    ],
+)
 
 
 def test_ensure_bytes_with_bytes():
@@ -32,7 +35,7 @@ def test_ensure_bytes_with_unicode():
     """
     Unicode is encoded using the specified encoding.
     """
-    s = u"föö"
+    s = "föö"
 
     rv = ensure_bytes(s, "latin1")
 
@@ -48,7 +51,7 @@ def test_b64_decode_raw(raw_b64_string):
 
 def test_b64_encode_raw():
     # assert b64_encode_raw('') == ''
-    assert b64_encode_raw(b'') == ''
-    assert b64_encode_raw(b'a') == 'YQ'
-    assert b64_encode_raw(b'aa') == 'YWE'
-    assert b64_encode_raw(b'aaa') == 'YWFh'
+    assert b64_encode_raw(b"") == ""
+    assert b64_encode_raw(b"a") == "YQ"
+    assert b64_encode_raw(b"aa") == "YWE"
+    assert b64_encode_raw(b"aaa") == "YWFh"

@@ -8,34 +8,38 @@ from porridge import Porridge
 
 
 KETTLES = (
-    Porridge('key1:secret1',
+    Porridge(
+        "key1:secret1",
         time_cost=1,
         memory_cost=8,
         parallelism=1,
     ),
-    Porridge('key2:secret2,key1:secret1',
+    Porridge(
+        "key2:secret2,key1:secret1",
         time_cost=1,
         memory_cost=8,
         parallelism=1,
-    )
+    ),
 )
+
 
 @pytest.fixture(params=KETTLES)
 def porridge(request):
-    '''A Porridge-instance suitable for testing.
+    """A Porridge-instance suitable for testing.
 
     Does no environment check and has very fast parameters.
-    '''
+    """
     return request.param
 
 
 PASSWORDS = (
-    "pässword".encode("latin-1"), # bytes
-    "pässword", # unicode
-    "password", # plain ascii
+    "pässword".encode("latin-1"),  # bytes
+    "pässword",  # unicode
+    "password",  # plain ascii
 )
+
 
 @pytest.fixture(params=PASSWORDS)
 def password(request):
-    '''A valid password, both as unicode and bytes'''
+    """A valid password, both as unicode and bytes"""
     return request.param
