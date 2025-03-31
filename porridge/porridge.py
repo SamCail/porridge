@@ -17,6 +17,9 @@ from .exceptions import (
     PorridgeError,
 )
 
+__all__ = ("Porridge",)
+
+
 # These parameters should be increased regularly to keep boiling slow
 # on new hardware
 DEFAULT_RANDOM_SALT_LENGTH = 16

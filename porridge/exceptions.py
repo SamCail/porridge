@@ -11,6 +11,13 @@ these should crash your app to ensure they are caught by monitoring and are
 super loud.
 """
 
+__all__ = (
+    "EncodedPasswordError",
+    "MissingKeyError",
+    "ParameterError",
+    "PorridgeError",
+)
+
 
 class PorridgeError(Exception):
     """
