@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "porridge"
+authors = [
+  { name = "Tarjei Husøy", email = "git@thusoy.com" },
+]
+dynamic = ["version"]
+description = "Simple, strong and standardized keyed password storage"
+readme = "README.md"
+requires-python = ">=3.8"
+license = "MIT"
+keywords = ["password", "password-storage", "argon2", "hash", "hashing", "security"]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: Web Environment",
+  "Intended Audience :: Developers",
+  # "Operating System :: MacOS",
+  # "Operating System :: Microsoft",
+  "Operating System :: POSIX",
+  "Operating System :: Unix",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
+  "Topic :: Security",
+  "Topic :: Security :: Cryptography",
+  "Topic :: Software Development :: Libraries"
+]
+dependencies = []
+
+[project.urls]
+Documentation = "https://github.com/thusoy/porridge#readme"
+Issues = "https://github.com/thusoy/porridge/issues"
+Source = "https://github.com/thusoy/porridge"
+
+[tool.coverage.run]
+source_pkgs = ["porridge", "tests"]
+branch = true
+parallel = true
+omit = ["tools", "extras"]
+
+[tool.coverage.paths]
+porridge = ["porridge"]
+tests = ["tests"]
+
+[tool.coverage.report]
+exclude_lines = [
+  "no cov",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]
