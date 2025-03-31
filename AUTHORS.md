@@ -1,15 +1,14 @@
-Credits & License
-=================
+# Porridge's authors
 
-Porridge is maintained by Tarjei Husøy and released under the [MIT license](https://github.com/thusoy/porridge/blob/master/LICENSE>).
+## Credits & License
 
-A full list of contributors can be found in [GitHub's overview](https://github.com/thusoy/porridge/graphs/contributors>).
+Porridge is maintained by Tarjei Husøy and released under the [MIT license](https://github.com/thusoy/porridge/blob/master/LICENSE).
+
+A full list of contributors can be found in [GitHub's overview](https://github.com/thusoy/porridge/graphs/contributors).
 
 Most of the work in wrapping the reference implementation of argon2 and setting up CI with cffi was done by Hynek Schlawack for [argon2_cffi](https://github.com/hynek/argon2_cffi) (MIT license).
 
-
-Vendored Code
--------------
+## Vendored Code
 
 ### Argon2
 
@@ -19,12 +18,11 @@ Except for the components listed below, the Argon2 code in this repository is co
 
 The string encoding routines in src/encoding.c are copyright (c) 2015 Thomas Pornin, and under [CC0] license.
 
-The [BLAKE2](https://blake2.net>) code in `src/blake2` is copyright (c) Samuel Neves, 2013-2015, and under [CC0] license.
+The [BLAKE2](https://blake2.net) code in `src/blake2` is copyright (c) Samuel Neves, 2013-2015, and under [CC0] license.
 
 The authors of Argon2 also were very helpful to get the library to compile on ancient versions of Visual Studio for ancient versions of Python.
 
 The documentation also quotes frequently from the [Argon2 paper](https://password-hashing.net/argon2-specs.pdf) to avoid mistakes by rephrasing.
-
 
 ### msinttypes
 

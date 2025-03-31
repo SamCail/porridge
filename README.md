@@ -8,17 +8,15 @@ While many password storage schemes like PBKDF2, bcrypt, scrypt and the likes wi
 
 Note that utilizing porridge is not magical solution to passwords on the internet, a complete solution should still enforce at least a password policy, secure password resets, rate-limiting and U2F/2FA. Have experienced security engineers set up something for you, or use high-level libraries that take care of it for you.
 
+## Installing
 
-Installing
-----------
-
-    $ pip install porridge
+```bash
+pip install porridge
+```
 
 Pre-built wheels is available for Windows, Linux and macOS. Building from source requires cffi >= 1.0.0, which in turn requires libffi and python headers to compile.
 
-
-Usage
------
+## Usage
 
 ```python
 >>> from porridge import Porridge
@@ -38,12 +36,14 @@ This setup ensures that even if your database is leaked, your users' passwords a
 This shell snippet is handy to create strong secrets:
 
 ```bash
-$ echo "$(date +%Y%m%d):$(openssl rand -base64 30)"
+echo "$(date +%Y%m%d):$(openssl rand -base64 30)"
 ```
 
 This string will thus grow regularly. After some time, it'll look something like
 
-    keyid3:key3,keyid2:key2,keyid1:key1
+```text
+keyid3:key3,keyid2:key2,keyid1:key1
+```
 
 The first key in the list (in this case, keyid3) will be used to boil new passwords.
 
@@ -51,20 +51,20 @@ Old keys are necessary to verify the passwords of users who haven't logged in si
 
 **Note**: Create a `Porridge` instance once and re-use it across your application, it does some parameter validation and stuff on startup you'd rather not want to redo for every passord you process.
 
+## Local development
 
-Local development
------------------
-
-    $ ./configure
-    $ ./test
+```bash
+./configure
+./test
+```
 
 Continually running tests whenever source changes:
 
-    $ ./tools/watch_and_run_tests.sh
+```bash
+./tools/watch_and_run_tests.sh
+```
 
-
-Motivation
-----------
+## Motivation
 
 I couldn't find any existing solutions that utilizes argon2's server-side secret feature, as most libraries only wrap the high-level interfaces, which sadly don't enable setting secrets.
 
@@ -76,15 +76,13 @@ Some guiding principles for this project:
 - Following nothing more than the quickstart should result in a very secure implementation
 - Migrating from existing solutions should be easy
 
-
-Maintenance
------------
+## Maintenance
 
 Keeping this running over an extended period requires two things:
     - Adding new secrets regularly (twice a year is probably fine), and whenever you suspect a breach
     - Using `needs_update()` to store new boils where the password was stored with old parameters
 
-The first is to ensure that if your servers at one point is compromised, future passwords are not impacted. 
+The first is to ensure that if your servers at one point is compromised, future passwords are not impacted.
 
 The second point ensures that every time one of your users log in, the parameters their existing boiled password is stored under are still strong and the secret current, otherwise it'll be re-stored.
 
@@ -112,9 +110,7 @@ The default parameters will be bumped regularly with new releases of porridge, t
 
 Note that to avoid DDoS itself, a Porridge instance will refuse to verify passwords boiled with parameters that are stronger than a given threshold of it's own parameters. This is to ensure that if you by accident try to verify a password with a time cost or memory cost in the millions, you will not have to wait for the heat death of the universe to regain control of your computer. But we also want to ensure that we can upgrade parameters gradually across a fleet of instances without some suddenly starting to fail, thus when you're increasing the cost parameters you should ensure you increase them with less than the `parameter_threshold`. The default threshold is 4, thus you'll be fine if you double parameters, but if you want to bump parameters with more than 4x you should increase `default_threshold` across your fleet first.
 
-
-FAQ
----
+## FAQ
 
 *Q: I notice the word "hash" isn't used much by porridge, why?*
 A: Because it's too easy to get stuff wrong when communicated to people who are not cryptographers, which include most of us. Experienced cryptographers do a mental translation of "hash" to "memory-hard key stretching" whenever they're in a password context, but the rest of us don't. Thus it's too easy for non-cryptographers to write password storage solutions that either store passwords in plaintext, or just use an actual "hash", leading to puppies dying left and right. Thus for porridge, passwords are "boiled". If non-cryptographers hear that they're supposed to boil passwords, any decent search engine will ensure they end up with a very robust solution. This project is named porridge, as it's one dish that requires salt and a long boil, but also avoids squatting a "password-boiler" package that makes it hard for other packages to attempt to solve the same problem. Eran Hammer has some [more thoughts on this](https://hueniverse.com/the-myth-of-descriptive-module-names-d34d5feaa273).
@@ -128,9 +124,7 @@ A: Because good porridge requires more than just salt, takes a long time to boil
 *Q: Could you release wheels for platform X?*
 A: All releases of Porridge use wheels built by Travis CI and AppVeyor (see `./tools/release.py` for how it's done). If you need another platform supported, like a specific version of PyPy on some platform, open a PR adding it to the build matrix, and it'll automatically be part of the next release.
 
-
-Security
---------
+## Security
 
 Porridge wraps the reference implementation of [argon2](https://github.com/P-H-C/phc-winner-argon2), the winner of the Password Hashing Competition, which means it has been studied in detail by very experienced cryptanalysts.
 
@@ -146,38 +140,32 @@ porridge = Porridge('key1:secret1', time_cost=8, memory_cost=1024, parallelism=1
 
 If you find a security-critical bug that you'd rather not disclose openly in the issues, shoot an email to hello at thusoy.com. This project does not have a bug bounty, but you will be credited (if you wish) here in the README and in the changelog.
 
-
-Alternatives
-------------
+## Alternatives
 
 If you can't apply server-side secrets, plain [argon2](https://github.com/hynek/argon2_cffi) is the recommended way to store your passwords as of best practices in 2017. To utilize server-side secrets with other schemes you can HMAC the password with your secret before passing it to your key stretching function, but it'll be very hard to rotate this secret without invalidating all your passwords.
 
-
-Credits
--------
+## Credits
 
 Many thanks to [argon2_cffi](https://github.com/hynek/argon2_cffi) for a great starting point for wrapping argon2.
 
-
-Troubleshooting
----------------
+## Troubleshooting
 
 ### Import fails with libpython shared object not found
 
 If you get a traceback similar to this when trying to import the module:
 
-```
+```text
     from ._ffi import ffi, lib
 ImportError: libpython2.7.so.1.0: cannot open shared object file: No such file or directory
 ```
 
 You are probably missing the `python-dev` package. On ubuntu/debian: `sudo apt-get install python-dev`.
 
-
 ### Installation fails with 'compilation terminated'
 
 If installing the module fails with a traceback like
-```
+
+```text
 c/_cffi_backend.c:15:17: fatal error: ffi.h: No such file or directory
 
  #include <ffi.h>
